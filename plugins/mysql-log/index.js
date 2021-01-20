@@ -41,11 +41,17 @@ export default {
       required: false,
       description: 'A overridden server ID.',
       default: null
+    },
+    logPlayerConnections: {
+      required: false,
+      description: 'Whether or not to log player connections',
+      default: false
     }
   },
 
   init: async (server, options) => {
     const serverID = options.overrideServerID === null ? server.id : options.overrideServerID;
+    const currentPlayerList = [];
 
     server.on(TICK_RATE, (info) => {
       options.mysqlPool.query(
@@ -59,6 +65,10 @@ export default {
         'INSERT INTO PlayerCount(time, server, player_count) VALUES (NOW(),?,?)',
         [serverID, players.length]
       );
+      if (server.gatherPlayerConnections) {
+        gatherPlayerConnections(server, options, players, this.currentPlayerList);
+        this.currentPlayerList = players;
+      }
     });
 
     server.on(NEW_GAME, (info) => {
@@ -133,5 +143,13 @@ export default {
         info.reviver ? info.reviver.squadID : null
       ]);
     });
+    if (options.logPlayerConnections) {
+      gatherPlayerConnections(server, options);
+    }
   }
+
 };
+
+gatherPlayerConnections = (server, options, players, oldPlayers) => {
+  
+}

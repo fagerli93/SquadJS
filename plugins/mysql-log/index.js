@@ -48,50 +48,6 @@ export default {
       default: false
     }
   },
-
-  gatherPlayerConnections: (server, options, updatedPlayerList, oldPlayerList) => {
-    const currentTime = new Date();
-    // Filter out the new players compared to old list
-    const updatedPlayerListSteamIds = updatedPlayerList.map((p) => p.steamID);
-    const disconnectedPlayers = oldPlayerList
-      .filter((oldPlayer) => !updatedPlayerListSteamIds.includes(oldPlayer.steamID))
-      .map((disconnectedPlayer) => {
-        const res = {
-          ...disconnectedPlayer,
-          connect:
-            oldPlayerList.find((oldPlayer) => oldPlayer.steamID === disconnectedPlayer.steamID) ??
-            currentTime,
-          disconnect: currentTime
-        };
-        return {
-          ...res,
-          interval: Math.round((((res.connect - res.disconnect) % 86400000) % 3600000) / 60000)
-        };
-      });
-    if (disconnectedPlayers.length > 0) {
-      disconnectedPlayers.foreach((disconnectedPlayer) => {
-        options.mysqlPool.query(
-          'INSERT INTO PlayerConnections(steamID, name, connect, disconnect, interval) VALUES (?,?,?,?,?)',
-          [
-            disconnectedPlayer.steamID,
-            disconnectedPlayer.name,
-            disconnectedPlayer.connect,
-            disconnectedPlayer.disconnect,
-            disconnectedPlayer.interval
-          ]
-        );
-      });
-    }
-
-    return updatedPlayerList.map((updatedPlayer) => {
-      return {
-        ...updatedPlayer,
-        connect:
-          oldPlayerList.find((oldPlayer) => oldPlayer.steamID === updatedPlayer.steamID) ??
-          currentTime
-      };
-    });
-  },
   init: async (server, options) => {
     const serverID = options.overrideServerID === null ? server.id : options.overrideServerID;
     let currentPlayerList = [];
@@ -189,6 +145,49 @@ export default {
         info.reviver ? info.reviver.teamID : null,
         info.reviver ? info.reviver.squadID : null
       ]);
+    });
+  },
+  gatherPlayerConnections: (server, options, updatedPlayerList, oldPlayerList) => {
+    const currentTime = new Date();
+    // Filter out the new players compared to old list
+    const updatedPlayerListSteamIds = updatedPlayerList.map((p) => p.steamID);
+    const disconnectedPlayers = oldPlayerList
+      .filter((oldPlayer) => !updatedPlayerListSteamIds.includes(oldPlayer.steamID))
+      .map((disconnectedPlayer) => {
+        const res = {
+          ...disconnectedPlayer,
+          connect:
+            oldPlayerList.find((oldPlayer) => oldPlayer.steamID === disconnectedPlayer.steamID) ??
+            currentTime,
+          disconnect: currentTime
+        };
+        return {
+          ...res,
+          interval: Math.round((((res.connect - res.disconnect) % 86400000) % 3600000) / 60000)
+        };
+      });
+    if (disconnectedPlayers.length > 0) {
+      disconnectedPlayers.foreach((disconnectedPlayer) => {
+        options.mysqlPool.query(
+          'INSERT INTO PlayerConnections(steamID, name, connect, disconnect, interval) VALUES (?,?,?,?,?)',
+          [
+            disconnectedPlayer.steamID,
+            disconnectedPlayer.name,
+            disconnectedPlayer.connect,
+            disconnectedPlayer.disconnect,
+            disconnectedPlayer.interval
+          ]
+        );
+      });
+    }
+
+    return updatedPlayerList.map((updatedPlayer) => {
+      return {
+        ...updatedPlayer,
+        connect:
+          oldPlayerList.find((oldPlayer) => oldPlayer.steamID === updatedPlayer.steamID) ??
+          currentTime
+      };
     });
   }
 };

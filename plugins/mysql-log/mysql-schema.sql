@@ -140,8 +140,8 @@ CREATE TABLE IF NOT EXISTS `PlayerConnections` (
     `connect` DATETIME NOT NULL,
     `disconnect` DATETIME NOT NULL,
     `interval` INT NOT NULL,
-    `activeTime` INT NOT NULL,
-    `inactiveTime` INT NOT NULL
+    `activeInterval` INT NOT NULL,
+    `inactiveInterval` INT NOT NULL
 );
 
 DROP PROCEDURE IF EXISTS `NewMatch`;

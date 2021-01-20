@@ -133,6 +133,15 @@ CREATE TABLE IF NOT EXISTS `PlayerRevived` (
         ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS `PlayerConnections` (
+    `id` INT PRIMARY KEY AUTO_INCREMENT,
+    `steamID` VARCHAR(17) NOT NULL UNIQUE,
+    `name` VARCHAR(255),
+    `connect` DATETIME NOT NULL,
+    `disconnect` DATETIME NOT NULL,
+    `interval` INT NOT NULL
+);
+
 DROP PROCEDURE IF EXISTS `NewMatch`;
 DELIMITER #
 CREATE PROCEDURE `NewMatch` (

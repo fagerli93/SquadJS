@@ -49,9 +49,52 @@ export default {
     }
   },
 
+  gatherPlayerConnections: (server, options, updatedPlayerList, oldPlayerList) => {
+    const currentTime = new Date();
+    // Filter out the new players compared to old list
+    const updatedPlayerListSteamIds = updatedPlayerList.map((p) => p.steamID);
+    const disconnectedPlayers = oldPlayerList
+      .filter((oldPlayer) => !updatedPlayerListSteamIds.includes(oldPlayer.steamID))
+      .map((disconnectedPlayer) => {
+        const res = {
+          ...disconnectedPlayer,
+          connect:
+            oldPlayerList.find((oldPlayer) => oldPlayer.steamID === disconnectedPlayer.steamID) ??
+            currentTime,
+          disconnect: currentTime
+        };
+        return {
+          ...res,
+          interval: Math.round((((res.connect - res.disconnect) % 86400000) % 3600000) / 60000)
+        };
+      });
+    if (disconnectedPlayers.length > 0) {
+      disconnectedPlayers.foreach((disconnectedPlayer) => {
+        options.mysqlPool.query(
+          'INSERT INTO PlayerConnections(steamID, name, connect, disconnect, interval) VALUES (?,?,?,?,?)',
+          [
+            disconnectedPlayer.steamID,
+            disconnectedPlayer.name,
+            disconnectedPlayer.connect,
+            disconnectedPlayer.disconnect,
+            disconnectedPlayer.interval
+          ]
+        );
+      });
+    }
+
+    return updatedPlayerList.map((updatedPlayer) => {
+      return {
+        ...updatedPlayer,
+        connect:
+          oldPlayerList.find((oldPlayer) => oldPlayer.steamID === updatedPlayer.steamID) ??
+          currentTime
+      };
+    });
+  },
   init: async (server, options) => {
     const serverID = options.overrideServerID === null ? server.id : options.overrideServerID;
-    const currentPlayerList = [];
+    let currentPlayerList = [];
 
     server.on(TICK_RATE, (info) => {
       options.mysqlPool.query(
@@ -65,9 +108,13 @@ export default {
         'INSERT INTO PlayerCount(time, server, player_count) VALUES (NOW(),?,?)',
         [serverID, players.length]
       );
-      if (server.gatherPlayerConnections) {
-        gatherPlayerConnections(server, options, players, this.currentPlayerList);
-        this.currentPlayerList = players;
+      if (options.logPlayerConnections) {
+        currentPlayerList = this.gatherPlayerConnections(
+          server,
+          options,
+          players,
+          currentPlayerList
+        );
       }
     });
 
@@ -143,13 +190,5 @@ export default {
         info.reviver ? info.reviver.squadID : null
       ]);
     });
-    if (options.logPlayerConnections) {
-      gatherPlayerConnections(server, options);
-    }
   }
-
 };
-
-gatherPlayerConnections = (server, options, players, oldPlayers) => {
-  
-}

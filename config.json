@@ -182,7 +182,7 @@
       "enabled": false,
       "mysqlPool": "mysql",
       "overrideServerID": null,
-      "logPlayerConnections": true
+      "logPlayerConnections": false
     },
     {
       "plugin": "seeding-message",

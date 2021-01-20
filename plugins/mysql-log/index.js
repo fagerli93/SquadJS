@@ -169,13 +169,15 @@ export default {
     if (disconnectedPlayers.length > 0) {
       disconnectedPlayers.foreach((disconnectedPlayer) => {
         options.mysqlPool.query(
-          'INSERT INTO PlayerConnections(steamID, name, connect, disconnect, interval) VALUES (?,?,?,?,?)',
+          'INSERT INTO PlayerConnections(steamID, name, connect, disconnect, interval, activeTime, inactiveTime) VALUES (?,?,?,?,?,?,?)',
           [
             disconnectedPlayer.steamID,
             disconnectedPlayer.name,
             disconnectedPlayer.connect,
             disconnectedPlayer.disconnect,
-            disconnectedPlayer.interval
+            disconnectedPlayer.interval,
+            0,
+            0
           ]
         );
       });

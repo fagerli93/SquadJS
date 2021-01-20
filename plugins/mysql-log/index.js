@@ -147,6 +147,9 @@ export default {
       ]);
     });
   },
+  calculateIntervalMinutes: (date1, date2) => {
+    return Math.round((((date1 - date2) % 86400000) % 3600000) / 60000);
+  },
   gatherPlayerConnections: (server, options, updatedPlayerList, oldPlayerList) => {
     const currentTime = new Date();
     // Filter out the new players compared to old list
@@ -163,13 +166,13 @@ export default {
         };
         return {
           ...res,
-          interval: Math.round((((res.connect - res.disconnect) % 86400000) % 3600000) / 60000)
+          interval: this.calculateIntervalMinutes(res.connect, res.disconnect)
         };
       });
     if (disconnectedPlayers.length > 0) {
       disconnectedPlayers.foreach((disconnectedPlayer) => {
         options.mysqlPool.query(
-          'INSERT INTO PlayerConnections(steamID, name, connect, disconnect, interval, activeTime, inactiveTime) VALUES (?,?,?,?,?,?,?)',
+          'INSERT INTO PlayerConnections(steamID, name, connect, disconnect, interval, activeInterval, inactiveInterval) VALUES (?,?,?,?,?,?,?)',
           [
             disconnectedPlayer.steamID,
             disconnectedPlayer.name,

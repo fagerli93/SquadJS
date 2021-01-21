@@ -4,8 +4,11 @@ import {
   PLAYER_DIED,
   PLAYER_REVIVED,
   TICK_RATE,
-  PLAYERS_UPDATED
+  PLAYERS_UPDATED,
+  PLAYER_STATE_CHANGE
 } from 'squad-server/events';
+
+let currentPlayerList = [];
 
 export default {
   name: 'mysql-log',
@@ -48,9 +51,11 @@ export default {
       default: false
     }
   },
+  calculateIntervalMinutes: (date1, date2) => {
+    return Math.round((((date1 - date2) % 86400000) % 3600000) / 60000);
+  },
   init: async (server, options) => {
     const serverID = options.overrideServerID === null ? server.id : options.overrideServerID;
-    let currentPlayerList = [];
 
     server.on(TICK_RATE, (info) => {
       options.mysqlPool.query(
@@ -71,6 +76,29 @@ export default {
           players,
           currentPlayerList
         );
+      }
+    });
+    server.on(PLAYER_STATE_CHANGE, (info) => {
+      const index = currentPlayerList.findIndex((p) => p.name === info.name);
+      if (index !== -1) {
+        const currentTime = new Date();
+        currentPlayerList[index].state = info.newState;
+        if (info.newState === 'Playing') {
+          currentPlayerList[index].inactiveTime =
+            (currentPlayerList[index].inactiveTime ?? 0) +
+            this.calculateIntervalMinutes(
+              currentTime,
+              currentPlayerList[index].lastUpdate ?? currentTime
+            );
+        } else {
+          currentPlayerList[index].activeTime =
+            (currentPlayerList[index].activeTime ?? 0) +
+            this.calculateIntervalMinutes(
+              currentTime,
+              currentPlayerList[index].lastUpdate ?? currentTime
+            );
+        }
+        currentPlayerList[index].lastUpdate = currentTime;
       }
     });
 
@@ -147,9 +175,6 @@ export default {
       ]);
     });
   },
-  calculateIntervalMinutes: (date1, date2) => {
-    return Math.round((((date1 - date2) % 86400000) % 3600000) / 60000);
-  },
   gatherPlayerConnections: (server, options, updatedPlayerList, oldPlayerList) => {
     const currentTime = new Date();
     // Filter out the new players compared to old list
@@ -170,7 +195,23 @@ export default {
         };
       });
     if (disconnectedPlayers.length > 0) {
+      const currentTime = new Date();
       disconnectedPlayers.foreach((disconnectedPlayer) => {
+        if (disconnectedPlayer.state === 'Inactive') {
+          disconnectedPlayer.inactiveTime =
+            (disconnectedPlayer.inactiveTime ?? 0) +
+            this.calculateIntervalMinutes(
+              currentTime,
+              disconnectedPlayer.lastUpdate ?? currentTime
+            );
+        } else {
+          disconnectedPlayer.activeTime =
+            (disconnectedPlayer.activeTime ?? 0) +
+            this.calculateIntervalMinutes(
+              currentTime,
+              disconnectedPlayer.lastUpdate ?? currentTime
+            );
+        }
         options.mysqlPool.query(
           'INSERT INTO PlayerConnections(steamID, name, connect, disconnect, interval, activeInterval, inactiveInterval) VALUES (?,?,?,?,?,?,?)',
           [
@@ -179,8 +220,8 @@ export default {
             disconnectedPlayer.connect,
             disconnectedPlayer.disconnect,
             disconnectedPlayer.interval,
-            0,
-            0
+            disconnectedPlayer.activeTime ?? 0,
+            disconnectedPlayer.inactiveTime ?? 0
           ]
         );
       });
@@ -191,7 +232,9 @@ export default {
         ...updatedPlayer,
         connect:
           oldPlayerList.find((oldPlayer) => oldPlayer.steamID === updatedPlayer.steamID) ??
-          currentTime
+          currentTime,
+        state: updatedPlayer.state || 'Playing',
+        lastUpdate: updatedPlayer.lastUpdate || currentTime
       };
     });
   }

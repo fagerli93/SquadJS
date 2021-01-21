@@ -10,6 +10,7 @@ import PlayerWounded from './player-wounded.js';
 import RoundWinner from './round-winner.js';
 import ServerTickRate from './server-tick-rate.js';
 import SteamIDConnected from './steamid-connected.js';
+import PlayerStateChange from './player-state-change.js';
 
 export default [
   AdminBroadcast,
@@ -23,5 +24,6 @@ export default [
   PlayerWounded,
   RoundWinner,
   ServerTickRate,
-  SteamIDConnected
+  SteamIDConnected,
+  PlayerStateChange
 ];

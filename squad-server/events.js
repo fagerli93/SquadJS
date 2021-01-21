@@ -183,6 +183,11 @@ const TICK_RATE = 'TICK_RATE';
  */
 const RCON_ERROR = 'RCON_ERROR';
 
+/** Occurs when the state of a player changes from/to inactive/paying
+ *
+ */
+const PLAYER_STATE_CHANGE = 'PLAYER_STATE_CHANGE';
+
 export {
   PLAYERS_UPDATED,
   LAYERS_UPDATED,
@@ -200,5 +205,6 @@ export {
   PLAYER_DIED,
   PLAYER_REVIVED,
   TICK_RATE,
-  RCON_ERROR
+  RCON_ERROR,
+  PLAYER_STATE_CHANGE
 };

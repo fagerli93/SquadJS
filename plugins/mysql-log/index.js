@@ -10,6 +10,12 @@ import {
 
 let currentPlayerList = [];
 
+const StateEnum = Object.freeze({
+  Playing: 'Playing',
+  Inactive: 'Inactive',
+  Seeding: 'Seeding'
+});
+
 export default {
   name: 'mysql-log',
   description:
@@ -49,6 +55,11 @@ export default {
       required: false,
       description: 'Whether or not to log player connections',
       default: false
+    },
+    seedingLimit: {
+      required: false,
+      description: 'The amount of players to consider a match seeding',
+      default: 40
     }
   },
   calculateIntervalMinutes: (date1, date2) => {
@@ -79,11 +90,24 @@ export default {
       }
     });
     server.on(PLAYER_STATE_CHANGE, (info) => {
+      const currentTime = new Date();
       const index = currentPlayerList.findIndex((p) => p.name === info.name);
       if (index !== -1) {
-        const currentTime = new Date();
-        currentPlayerList[index].state = info.newState;
-        if (info.newState === 'Playing') {
+        // const oldState = currentPlayerList[index].state ?? StateEnum.Playing;
+        currentPlayerList[index].state =
+          currentPlayerList.length >= options.seedingLimit ? info.newState : StateEnum.Seeding;
+        switch (currentPlayerList[index].state) {
+          case StateEnum.Inactive: {
+            break;
+          }
+          case StateEnum.Seeding: {
+            break;
+          }
+          default: {
+            break;
+          }
+        }
+        if (info.newState === StateEnum.Playing) {
           currentPlayerList[index].inactiveTime =
             (currentPlayerList[index].inactiveTime ?? 0) +
             this.calculateIntervalMinutes(
@@ -195,25 +219,39 @@ export default {
         };
       });
     if (disconnectedPlayers.length > 0) {
-      const currentTime = new Date();
+      // Capture last bit of connectionTime and log to DB
       disconnectedPlayers.foreach((disconnectedPlayer) => {
-        if (disconnectedPlayer.state === 'Inactive') {
-          disconnectedPlayer.inactiveTime =
-            (disconnectedPlayer.inactiveTime ?? 0) +
-            this.calculateIntervalMinutes(
-              currentTime,
-              disconnectedPlayer.lastUpdate ?? currentTime
-            );
-        } else {
-          disconnectedPlayer.activeTime =
-            (disconnectedPlayer.activeTime ?? 0) +
-            this.calculateIntervalMinutes(
-              currentTime,
-              disconnectedPlayer.lastUpdate ?? currentTime
-            );
+        switch (disconnectedPlayer.state) {
+          case StateEnum.Inactive: {
+            disconnectedPlayer.inactiveTime =
+              (disconnectedPlayer.inactiveTime ?? 0) +
+              this.calculateIntervalMinutes(
+                currentTime,
+                disconnectedPlayer.lastUpdate ?? currentTime
+              );
+            break;
+          }
+          case StateEnum.Seeding: {
+            disconnectedPlayer.seedingTime =
+              (disconnectedPlayer.seedingTime ?? 0) +
+              this.calculateIntervalMinutes(
+                currentTime,
+                disconnectedPlayer.lastUpdate ?? currentTime
+              );
+            break;
+          }
+          default: {
+            disconnectedPlayer.activeTime =
+              (disconnectedPlayer.activeTime ?? 0) +
+              this.calculateIntervalMinutes(
+                currentTime,
+                disconnectedPlayer.lastUpdate ?? currentTime
+              );
+            break;
+          }
         }
         options.mysqlPool.query(
-          'INSERT INTO PlayerConnections(steamID, name, connect, disconnect, interval, activeInterval, inactiveInterval) VALUES (?,?,?,?,?,?,?)',
+          'INSERT INTO PlayerConnections(steamID, name, connect, disconnect, interval, active, inactive, seeding) VALUES (?,?,?,?,?,?,?,?)',
           [
             disconnectedPlayer.steamID,
             disconnectedPlayer.name,
@@ -221,7 +259,8 @@ export default {
             disconnectedPlayer.disconnect,
             disconnectedPlayer.interval,
             disconnectedPlayer.activeTime ?? 0,
-            disconnectedPlayer.inactiveTime ?? 0
+            disconnectedPlayer.inactiveTime ?? 0,
+            disconnectedPlayer.seedingTime ?? 0
           ]
         );
       });
@@ -233,7 +272,7 @@ export default {
         connect:
           oldPlayerList.find((oldPlayer) => oldPlayer.steamID === updatedPlayer.steamID) ??
           currentTime,
-        state: updatedPlayer.state || 'Playing',
+        state: updatedPlayerList.length >= 40 ? StateEnum.Playing : StateEnum.Seeding,
         lastUpdate: updatedPlayer.lastUpdate || currentTime
       };
     });

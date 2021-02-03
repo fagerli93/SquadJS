@@ -31,6 +31,7 @@ export default {
     const channel = await options.discordClient.channels.fetch(options.channelID);
 
     server.on(ADMIN_BROADCAST, async (info) => {
+      console.log('\n\nBROADCAST!!!\n\n');
       channel.send({
         embed: {
           title: 'Admin Broadcast',

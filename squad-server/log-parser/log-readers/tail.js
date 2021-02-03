@@ -3,6 +3,7 @@ import TailModule from 'tail';
 
 export default class TailLogReader {
   constructor(queueLine, options = {}) {
+    console.log('Trying to setup log');
     if (typeof queueLine !== 'function')
       throw new Error('queueLine argument must be specified and be a function.');
     if (!options.logDir) throw new Error('Log directory must be specified.');

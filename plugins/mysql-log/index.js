@@ -8,13 +8,10 @@ import {
   PLAYER_STATE_CHANGE
 } from 'squad-server/events';
 
-let currentPlayerList = [];
+import { gatherPlayerConnections, calculateIntervalMinutes } from './gatherConnections.js';
+import { StateEnum } from './stateEnum.js';
 
-const StateEnum = Object.freeze({
-  Playing: 'Playing',
-  Inactive: 'Inactive',
-  Seeding: 'Seeding'
-});
+let currentPlayerList = [];
 
 export default {
   name: 'mysql-log',
@@ -62,11 +59,9 @@ export default {
       default: 40
     }
   },
-  calculateIntervalMinutes: (date1, date2) => {
-    return Math.round((((date1 - date2) % 86400000) % 3600000) / 60000);
-  },
   init: async (server, options) => {
     const serverID = options.overrideServerID === null ? server.id : options.overrideServerID;
+    console.log('\n\nSetting up MYSQL\n\n\n');
 
     server.on(TICK_RATE, (info) => {
       options.mysqlPool.query(
@@ -80,13 +75,9 @@ export default {
         'INSERT INTO PlayerCount(time, server, player_count) VALUES (NOW(),?,?)',
         [serverID, players.length]
       );
+      console.log('Players updated', players);
       if (options.logPlayerConnections) {
-        currentPlayerList = this.gatherPlayerConnections(
-          server,
-          options,
-          players,
-          currentPlayerList
-        );
+        currentPlayerList = gatherPlayerConnections(server, options, players, currentPlayerList);
       }
     });
     server.on(PLAYER_STATE_CHANGE, (info) => {
@@ -110,14 +101,14 @@ export default {
         if (info.newState === StateEnum.Playing) {
           currentPlayerList[index].inactiveTime =
             (currentPlayerList[index].inactiveTime ?? 0) +
-            this.calculateIntervalMinutes(
+            calculateIntervalMinutes(
               currentTime,
               currentPlayerList[index].lastUpdate ?? currentTime
             );
         } else {
           currentPlayerList[index].activeTime =
             (currentPlayerList[index].activeTime ?? 0) +
-            this.calculateIntervalMinutes(
+            calculateIntervalMinutes(
               currentTime,
               currentPlayerList[index].lastUpdate ?? currentTime
             );
@@ -197,84 +188,6 @@ export default {
         info.reviver ? info.reviver.teamID : null,
         info.reviver ? info.reviver.squadID : null
       ]);
-    });
-  },
-  gatherPlayerConnections: (server, options, updatedPlayerList, oldPlayerList) => {
-    const currentTime = new Date();
-    // Filter out the new players compared to old list
-    const updatedPlayerListSteamIds = updatedPlayerList.map((p) => p.steamID);
-    const disconnectedPlayers = oldPlayerList
-      .filter((oldPlayer) => !updatedPlayerListSteamIds.includes(oldPlayer.steamID))
-      .map((disconnectedPlayer) => {
-        const res = {
-          ...disconnectedPlayer,
-          connect:
-            oldPlayerList.find((oldPlayer) => oldPlayer.steamID === disconnectedPlayer.steamID) ??
-            currentTime,
-          disconnect: currentTime
-        };
-        return {
-          ...res,
-          interval: this.calculateIntervalMinutes(res.connect, res.disconnect)
-        };
-      });
-    if (disconnectedPlayers.length > 0) {
-      // Capture last bit of connectionTime and log to DB
-      disconnectedPlayers.foreach((disconnectedPlayer) => {
-        switch (disconnectedPlayer.state) {
-          case StateEnum.Inactive: {
-            disconnectedPlayer.inactiveTime =
-              (disconnectedPlayer.inactiveTime ?? 0) +
-              this.calculateIntervalMinutes(
-                currentTime,
-                disconnectedPlayer.lastUpdate ?? currentTime
-              );
-            break;
-          }
-          case StateEnum.Seeding: {
-            disconnectedPlayer.seedingTime =
-              (disconnectedPlayer.seedingTime ?? 0) +
-              this.calculateIntervalMinutes(
-                currentTime,
-                disconnectedPlayer.lastUpdate ?? currentTime
-              );
-            break;
-          }
-          default: {
-            disconnectedPlayer.activeTime =
-              (disconnectedPlayer.activeTime ?? 0) +
-              this.calculateIntervalMinutes(
-                currentTime,
-                disconnectedPlayer.lastUpdate ?? currentTime
-              );
-            break;
-          }
-        }
-        options.mysqlPool.query(
-          'INSERT INTO PlayerConnections(steamID, name, connect, disconnect, interval, active, inactive, seeding) VALUES (?,?,?,?,?,?,?,?)',
-          [
-            disconnectedPlayer.steamID,
-            disconnectedPlayer.name,
-            disconnectedPlayer.connect,
-            disconnectedPlayer.disconnect,
-            disconnectedPlayer.interval,
-            disconnectedPlayer.activeTime ?? 0,
-            disconnectedPlayer.inactiveTime ?? 0,
-            disconnectedPlayer.seedingTime ?? 0
-          ]
-        );
-      });
-    }
-
-    return updatedPlayerList.map((updatedPlayer) => {
-      return {
-        ...updatedPlayer,
-        connect:
-          oldPlayerList.find((oldPlayer) => oldPlayer.steamID === updatedPlayer.steamID) ??
-          currentTime,
-        state: updatedPlayerList.length >= 40 ? StateEnum.Playing : StateEnum.Seeding,
-        lastUpdate: updatedPlayer.lastUpdate || currentTime
-      };
     });
   }
 };

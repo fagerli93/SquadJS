@@ -135,6 +135,7 @@ export default class Rcon {
         this.connected = true;
         this.verbose('Sending auth packet...');
         await this.write(RCONProtocol.SERVERDATA_AUTH, this.password);
+        this.verbose('Auth package written');
         resolve();
       };
 

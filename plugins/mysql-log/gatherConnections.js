@@ -82,9 +82,9 @@ export const gatherPlayerConnections = (server, options, updatedPlayerList, oldP
       }
       console.log(
         'Attempting to write to DB',
-        disconnectedPlayers[i].activeTime,
-        disconnectedPlayers[i].inactiveTime,
-        disconnectedPlayers[i].seedingTime
+        disconnectedPlayers[i].activeTime ?? 0,
+        disconnectedPlayers[i].inactiveTime ?? 0,
+        disconnectedPlayers[i].seedingTime ?? 0
       );
       options.mysqlPool.query(
         'INSERT INTO PlayerConnections(steamID, name, connect, disconnect, interval, active, inactive, seeding) VALUES (?,?,?,?,?,?,?,?)',

@@ -8,8 +8,7 @@ import {
   PLAYER_STATE_CHANGE
 } from 'squad-server/events';
 
-import { gatherPlayerConnections, calculateIntervalMinutes } from './gatherConnections.js';
-import { StateEnum } from './stateEnum.js';
+import { gatherPlayerConnections } from './gatherConnections.js';
 
 let currentPlayerList = [];
 
@@ -75,29 +74,19 @@ export default {
         'INSERT INTO PlayerCount(time, server, player_count) VALUES (NOW(),?,?)',
         [serverID, players.length]
       );
-      console.log('Players updated', players);
       if (options.logPlayerConnections) {
         currentPlayerList = gatherPlayerConnections(server, options, players, currentPlayerList);
       }
     });
     server.on(PLAYER_STATE_CHANGE, (info) => {
+      /*
       const currentTime = new Date();
       const index = currentPlayerList.findIndex((p) => p.name === info.name);
       if (index !== -1) {
         // const oldState = currentPlayerList[index].state ?? StateEnum.Playing;
         currentPlayerList[index].state =
           currentPlayerList.length >= options.seedingLimit ? info.newState : StateEnum.Seeding;
-        switch (currentPlayerList[index].state) {
-          case StateEnum.Inactive: {
-            break;
-          }
-          case StateEnum.Seeding: {
-            break;
-          }
-          default: {
-            break;
-          }
-        }
+
         if (info.newState === StateEnum.Playing) {
           currentPlayerList[index].inactiveTime =
             (currentPlayerList[index].inactiveTime ?? 0) +
@@ -113,8 +102,10 @@ export default {
               currentPlayerList[index].lastUpdate ?? currentTime
             );
         }
+        console.log(`Setting player updated lastUpdate to: ${currentTime}`);
         currentPlayerList[index].lastUpdate = currentTime;
       }
+      */
     });
 
     server.on(NEW_GAME, (info) => {

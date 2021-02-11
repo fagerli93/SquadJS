@@ -104,7 +104,7 @@ export default class Server extends EventEmitter {
 
   async updatePlayers() {
     clearTimeout(this.updatePlayerTimeout);
-    await this.rcon.listPlayers();
+    this.players = await this.rcon.listPlayers();
 
     // readd additional information about the player we have collected
     for (let i = 0; i < this.players.length; i++) {

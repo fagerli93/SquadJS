@@ -147,6 +147,7 @@ export default class Rcon {
 
       this.client.once('connect', onConnect);
       this.client.once('error', onError);
+      console.log(this.port, this.host);
 
       this.client.connect(this.port, this.host);
     });

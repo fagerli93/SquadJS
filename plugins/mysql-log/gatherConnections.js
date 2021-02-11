@@ -1,86 +1,152 @@
 import { StateEnum } from './stateEnum.js';
 
+export const calculateIntervalMinutes = (date1, date2) => {
+  return Math.round((((date1 - date2) % 86400000) % 3600000) / 60000);
+};
+
 export const gatherPlayerConnections = (server, options, updatedPlayerList, oldPlayerList) => {
+  console.log('Updated list: ', updatedPlayerList);
+  console.log('Old list: ', oldPlayerList);
+  // Get some info that we need
   const currentTime = new Date();
-  // Filter out the new players compared to old list
   const updatedPlayerListSteamIds = updatedPlayerList.map((p) => p.steamID);
+  const oldPlayerListSteamIds = oldPlayerList.map((p) => p.steamID);
+  const connectedPlayersListSteamIds = updatedPlayerList
+    .filter((updatedPlayer) => !oldPlayerListSteamIds.includes(updatedPlayer.steamID))
+    .map((p) => p.steamID);
   const disconnectedPlayers = oldPlayerList
     .filter((oldPlayer) => !updatedPlayerListSteamIds.includes(oldPlayer.steamID))
     .map((disconnectedPlayer) => {
       const res = {
         ...disconnectedPlayer,
-        connect:
-          oldPlayerList.find((oldPlayer) => oldPlayer.steamID === disconnectedPlayer.steamID) ??
-          currentTime,
         disconnect: currentTime
       };
       return {
         ...res,
-        interval: this.calculateIntervalMinutes(res.connect, res.disconnect)
+        interval: calculateIntervalMinutes(res.connect, res.disconnect)
       };
     });
-  if (disconnectedPlayers.length > 0) {
-    console.log('Player disconnected', disconnectedPlayers);
-    // Capture last bit of connectionTime and log to DB
-    disconnectedPlayers.foreach((disconnectedPlayer) => {
-      switch (disconnectedPlayer.state) {
-        case StateEnum.Inactive: {
-          disconnectedPlayer.inactiveTime =
-            (disconnectedPlayer.inactiveTime ?? 0) +
-            this.calculateIntervalMinutes(
-              currentTime,
-              disconnectedPlayer.lastUpdate ?? currentTime
-            );
-          break;
-        }
-        case StateEnum.Seeding: {
-          disconnectedPlayer.seedingTime =
-            (disconnectedPlayer.seedingTime ?? 0) +
-            this.calculateIntervalMinutes(
-              currentTime,
-              disconnectedPlayer.lastUpdate ?? currentTime
-            );
-          break;
-        }
-        default: {
-          disconnectedPlayer.activeTime =
-            (disconnectedPlayer.activeTime ?? 0) +
-            this.calculateIntervalMinutes(
-              currentTime,
-              disconnectedPlayer.lastUpdate ?? currentTime
-            );
-          break;
-        }
+  const disconnectedPlayersListSteamIds = disconnectedPlayers.map(
+    (disconnectedPlayer) => disconnectedPlayer.steamID
+  );
+
+  // Update all players state
+  updatedPlayerList = updatedPlayerList.map((player) => {
+    return {
+      ...player,
+      state:
+        updatedPlayerList.length >= options.seedingLimit ? StateEnum.Playing : StateEnum.Seeding
+    };
+  });
+
+  // Handle newly connected players and update their lastUpdate and connect time
+  if (connectedPlayersListSteamIds.length > 0) {
+    console.log(`Newly connected players: `, connectedPlayersListSteamIds);
+    updatedPlayerList = updatedPlayerList.map((updatedPlayer) => {
+      if (connectedPlayersListSteamIds.includes(updatedPlayer.steamID)) {
+        console.log('Setting currentTime and shit for connected player');
+        return { ...updatedPlayer, lastUpdate: currentTime, connect: currentTime };
       }
-      console.log('Attempting to write to DB');
-      options.mysqlPool.query(
-        'INSERT INTO PlayerConnections(steamID, name, connect, disconnect, interval, active, inactive, seeding) VALUES (?,?,?,?,?,?,?,?)',
-        [
-          disconnectedPlayer.steamID,
-          disconnectedPlayer.name,
-          disconnectedPlayer.connect,
-          disconnectedPlayer.disconnect,
-          disconnectedPlayer.interval,
-          disconnectedPlayer.activeTime ?? 0,
-          disconnectedPlayer.inactiveTime ?? 0,
-          disconnectedPlayer.seedingTime ?? 0
-        ]
-      );
+      return updatedPlayer;
     });
   }
 
-  return updatedPlayerList.map((updatedPlayer) => {
-    return {
-      ...updatedPlayer,
-      connect:
-        oldPlayerList.find((oldPlayer) => oldPlayer.steamID === updatedPlayer.steamID) ??
+  // Handle disconnected players
+  if (disconnectedPlayers.length > 0) {
+    console.log('Disconnected players', disconnectedPlayers);
+    for (let i = 0; i < disconnectedPlayers.length; i++) {
+      const intervalInMinutes = calculateIntervalMinutes(
         currentTime,
-      state: updatedPlayerList.length >= 40 ? StateEnum.Playing : StateEnum.Seeding,
-      lastUpdate: updatedPlayer.lastUpdate || currentTime
-    };
-  });
-};
+        disconnectedPlayers[i].lastUpdate ?? currentTime
+      );
+      console.log(
+        `Going through for player: ${disconnectedPlayers[i].name} with state ${disconnectedPlayers[i].state} - interval: ${intervalInMinutes}`
+      );
+      switch (disconnectedPlayers[i].state) {
+        case StateEnum.Inactive: {
+          disconnectedPlayers[i].inactiveTime =
+            (disconnectedPlayers[i].inactiveTime ?? 0) + intervalInMinutes;
 
-export const calculateIntervalMinutes = (date1, date2) => {
-  return Math.round((((date1 - date2) % 86400000) % 3600000) / 60000);
+          break;
+        }
+        case StateEnum.Seeding: {
+          disconnectedPlayers[i].seedingTime =
+            (disconnectedPlayers[i].seedingTime ?? 0) + intervalInMinutes;
+          break;
+        }
+        default: {
+          disconnectedPlayers[i].activeTime =
+            (disconnectedPlayers[i].activeTime ?? 0) + intervalInMinutes;
+          break;
+        }
+      }
+      console.log(
+        'Attempting to write to DB',
+        disconnectedPlayers[i].activeTime,
+        disconnectedPlayers[i].inactiveTime,
+        disconnectedPlayers[i].seedingTime
+      );
+      options.mysqlPool.query(
+        'INSERT INTO PlayerConnections(steamID, name, connect, disconnect, interval, active, inactive, seeding) VALUES (?,?,?,?,?,?,?,?)',
+        [
+          disconnectedPlayers[i].steamID,
+          disconnectedPlayers[i].name,
+          disconnectedPlayers[i].connect,
+          disconnectedPlayers[i].disconnect,
+          disconnectedPlayers[i].interval,
+          disconnectedPlayers[i].activeTime ?? 0,
+          disconnectedPlayers[i].inactiveTime ?? 0,
+          disconnectedPlayers[i].seedingTime ?? 0
+        ]
+      );
+    }
+  }
+
+  // Handle players that changed their state
+  const playersWithPossibleNewState = updatedPlayerList
+    .filter((player) => !disconnectedPlayersListSteamIds.includes(player.steamID))
+    .filter((player) => !connectedPlayersListSteamIds.includes(player.steamID));
+  for (let i = 0; i < playersWithPossibleNewState.length; i++) {
+    const oldListIndex = oldPlayerList.findIndex(
+      (player) => player.steamID === playersWithPossibleNewState[i].steamID
+    );
+    const updatedIndex = updatedPlayerList.findIndex(
+      (player) => player.steamID === playersWithPossibleNewState[i].steamID
+    );
+    // Get previous state and merge
+    if (oldListIndex !== -1) {
+      if (updatedIndex !== -1) {
+        updatedPlayerList[updatedIndex] = {
+          ...oldPlayerList[oldListIndex],
+          ...updatedPlayerList[updatedIndex]
+        };
+      } else {
+        console.warn('UPDATED INDEX NOT VALID - SOMETHING WENT TO SHIT');
+      }
+      if (playersWithPossibleNewState[i].state !== oldPlayerList[oldListIndex].state) {
+        console.log(`User ${playersWithPossibleNewState[i].name} changed his state`);
+        switch (oldPlayerList[oldListIndex].state) {
+          case StateEnum.Seeding: {
+            updatedPlayerList[updatedIndex].seedingTime =
+              (updatedPlayerList[updatedIndex].seedingTime ?? 0) +
+              calculateIntervalMinutes(updatedPlayerList[updatedIndex].lastUpdate, currentTime);
+            break;
+          }
+          default: {
+            updatedPlayerList[updatedIndex].activeTime =
+              (updatedPlayerList[updatedIndex].activeTime ?? 0) +
+              calculateIntervalMinutes(updatedPlayerList[updatedIndex].lastUpdate, currentTime);
+          }
+        }
+        updatedPlayerList[updatedIndex].lastUpdate = currentTime;
+      }
+    } else {
+      console.warn('OLD INDEX NOT VALID - SOMETHING WENT TO SHIT');
+    }
+    // User changed his state
+  }
+
+  console.log('Returning list: ', updatedPlayerList);
+
+  return updatedPlayerList;
 };
